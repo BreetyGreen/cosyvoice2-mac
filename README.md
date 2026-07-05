@@ -29,8 +29,8 @@
 ## 二、一键安装
 
 ```bash
-git clone https://github.com/<your-name>/mac-cosyvoice2-quickstart.git
-cd mac-cosyvoice2-quickstart
+git clone https://github.com/BreetyGreen/cosyvoice2-mac.git
+cd cosyvoice2-mac
 bash install.sh
 ```
 
