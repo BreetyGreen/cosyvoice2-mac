@@ -28,6 +28,20 @@ tts.py — CosyVoice2 音色克隆命令行工具
   # 免 prompt 文本（推荐音频有杂音/中英混杂/懒得校对时用）
   python tts.py --ref ~/Desktop/manbo.mp3 --text "要合成的目标文字" \
                 --no-prompt-text --out result.wav
+
+音频清洗（默认开启，决定克隆"像不像"的最关键一步）：
+  参考音频进来会先自动清洗：高通去低频噪 → FFT 降噪 → 响度归一化 →
+  切掉首尾静音和过长停顿 → 重采样 16k。脏音频（背景音/忽大忽小）能明显改善。
+
+  # 只取清洗后最干净的前 8 秒作参考（参考音频 5~10 秒最佳）
+  python tts.py --ref ~/Desktop/manbo.mp3 --text "要合成的文字" \
+                --no-prompt-text --clip-seconds 8 --out result.wav
+
+  # 人声本来很干净、不想被降噪弄闷：关掉降噪
+  python tts.py --ref clean.wav --text "..." --no-denoise
+
+  # 完全关闭清洗，用原始音频（对照实验用）
+  python tts.py --ref ref.wav --text "..." --no-clean
 """
 import argparse
 import os
@@ -52,14 +66,80 @@ def find_cosyvoice_dir(user_dir: str) -> str:
     )
 
 
-def to_16k_mono(src: str, dst: str) -> str:
-    """用 ffmpeg 把参考音频转成 16k 单声道 wav（最稳定的输入格式）。"""
-    subprocess.run(
-        ["ffmpeg", "-y", "-i", src, "-ar", "16000", "-ac", "1", dst],
-        check=True,
+def _run_ffmpeg(args: list):
+    """跑一条 ffmpeg 命令，失败时抛出带 stderr 的异常方便定位。"""
+    proc = subprocess.run(
+        ["ffmpeg", "-y", *args],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "ffmpeg 执行失败：\n" + proc.stderr.decode("utf-8", "ignore")[-800:]
+        )
+
+
+def _probe_duration(path: str) -> float:
+    """返回音频时长（秒）。ffprobe 不可用时返回 0。"""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        ).stdout.decode().strip()
+        return float(out)
+    except Exception:
+        return 0.0
+
+
+def to_16k_mono(src: str, dst: str) -> str:
+    """最基础转换：16k 单声道 wav（不做任何清洗，供 --no-clean 使用）。"""
+    _run_ffmpeg(["-i", src, "-ar", "16000", "-ac", "1", dst])
+    return dst
+
+
+def preprocess_audio(src: str, dst: str, clip_seconds: float = 0.0,
+                     denoise: bool = True) -> str:
+    """参考音频清洗管线 —— 决定克隆"像不像"的最关键一步（约 70% 权重）。
+
+    依次做：
+      1) 转单声道                     多声道/立体声会干扰音色提取
+      2) highpass=80Hz               滤掉低频轰鸣/空调/电流底噪
+      3) afftdn (FFT 降噪)           压制稳态背景噪声          [denoise=True 时]
+      4) loudnorm (EBU R128)         响度归一化，音量忽大忽小会让音色不稳
+      5) silenceremove               切掉首尾静音和句间过长停顿
+      6) 重采样到 16k                CosyVoice 前端最稳的输入采样率
+
+    clip_seconds > 0 时，只保留清洗后的前 N 秒（参考音频 5~10 秒最佳，
+    太长反而引入更多变数）。
+    """
+    # 组装滤镜链：顺序有讲究，先去噪再归一化再切静音
+    chain = ["aformat=channel_layouts=mono", "highpass=f=80"]
+    if denoise:
+        # afftdn: nf=-25 适度降噪，过猛会让人声发闷失真
+        chain.append("afftdn=nf=-25")
+    chain.append("loudnorm=I=-16:TP=-1.5:LRA=11")
+    # 切静音：首尾静音去掉；中间超过 0.8s 的停顿压到 0.5s 以内
+    chain.append(
+        "silenceremove=start_periods=1:start_silence=0.1:start_threshold=-45dB:"
+        "stop_periods=-1:stop_silence=0.5:stop_threshold=-45dB"
+    )
+    af = ",".join(chain)
+
+    args = ["-i", src, "-af", af, "-ar", "16000", "-ac", "1"]
+    if clip_seconds and clip_seconds > 0:
+        # 放在输出侧，对清洗后的结果截取前 clip_seconds 秒
+        args += ["-t", f"{clip_seconds:.2f}"]
+    args.append(dst)
+    _run_ffmpeg(args)
+
+    dur = _probe_duration(dst)
+    print(f">>> 清洗完成：{os.path.basename(dst)}  时长 {dur:.1f}s "
+          f"(降噪={'开' if denoise else '关'}"
+          f"{'，截取前 %.0fs' % clip_seconds if clip_seconds else ''})")
+    if dur < 2.0:
+        print("⚠️  清洗后音频不足 2 秒，可能是静音阈值切太狠或原音频太短，"
+              "可加 --no-clean 关闭清洗对比看看。")
     return dst
 
 
@@ -87,26 +167,41 @@ def main():
     ap.add_argument("--no-prompt-text", action="store_true",
                     help="免参考文字模式：走 cross-lingual，只用音频抽音色，跳过 whisper")
     ap.add_argument("--out", default="output.wav", help="输出 wav 路径")
+    ap.add_argument("--no-clean", action="store_true",
+                    help="关闭参考音频清洗管线（默认开启：降噪+响度归一化+切静音）")
+    ap.add_argument("--no-denoise", action="store_true",
+                    help="清洗时不做 FFT 降噪（人声本来很干净、降噪反而发闷时用）")
+    ap.add_argument("--clip-seconds", type=float, default=0.0,
+                    help="只取清洗后的前 N 秒作参考（5~10 最佳，0=不截取）")
     ap.add_argument("--model-dir", default="pretrained_models/CosyVoice2-0.5B",
                     help="模型权重目录（相对 CosyVoice 仓库）")
     ap.add_argument("--cosyvoice-dir", default=None, help="CosyVoice 仓库根目录")
     ap.add_argument("--lang", default="zh", help="whisper 识别语言，默认 zh")
     args = ap.parse_args()
 
-    # 定位并切换到 CosyVoice 仓库，把子模块加进 path
+    # 定位并切换到 CosyVoice 仓库，把仓库根目录和子模块加进 path
     cv_dir = find_cosyvoice_dir(args.cosyvoice_dir)
     os.chdir(cv_dir)
-    sys.path.append(os.path.join(cv_dir, "third_party", "Matcha-TTS"))
+    # 关键：仓库根目录本身要进 sys.path，否则 `import cosyvoice` 找不到包
+    # （os.chdir 只改工作目录，不影响 import 搜索路径）
+    sys.path.insert(0, cv_dir)
+    sys.path.insert(0, os.path.join(cv_dir, "third_party", "Matcha-TTS"))
     print(f">>> CosyVoice 仓库：{cv_dir}")
 
     ref = os.path.abspath(os.path.expanduser(args.ref))
     if not os.path.isfile(ref):
         sys.exit(f"❌ 参考音频不存在：{ref}")
 
-    # 参考音频转 16k 单声道
+    # 参考音频预处理：默认走清洗管线（决定像不像的关键），--no-clean 退回基础转换
     prompt_wav = os.path.join(cv_dir, "_ref_16k.wav")
-    print(">>> 转换参考音频为 16k 单声道 ...")
-    to_16k_mono(ref, prompt_wav)
+    if args.no_clean:
+        print(">>> 转换参考音频为 16k 单声道（未清洗）...")
+        to_16k_mono(ref, prompt_wav)
+    else:
+        print(">>> 清洗参考音频（降噪 + 响度归一化 + 切静音）...")
+        preprocess_audio(ref, prompt_wav,
+                         clip_seconds=args.clip_seconds,
+                         denoise=not args.no_denoise)
 
     # 参考文字：仅 zero-shot 模式需要（免 prompt 模式直接跳过 whisper）
     prompt_text = None

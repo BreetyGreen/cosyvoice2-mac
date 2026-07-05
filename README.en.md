@@ -13,6 +13,7 @@ This is a minimal, battle-tested deployment recipe put together *after* hitting 
 - ✅ Runs fully locally: free, offline, no dependency on CapCut or any cloud service
 - ✅ Zero-shot cloning: feed a 3–10s reference clip and immediately dub any text in that voice — **no training required**
 - ✅ Two cloning modes: with prompt text (zero-shot) / prompt-free (cross-lingual — skips whisper, avoids timbre drift from mis-transcription)
+- ✅ Automatic reference-audio cleanup: denoise + loudness normalization + silence trimming + optional cleanest-clip extraction, directly boosting similarity
 - ✅ Apple Silicon Metal (MPS) acceleration
 - ✅ One-command install script that auto-bypasses every dependency pitfall on Mac
 
@@ -80,6 +81,9 @@ Parameters:
 | `--text` | The target text to synthesize |
 | `--prompt-text` | (Optional) The exact sentence spoken in the reference clip. If omitted, whisper transcribes it automatically; providing it manually is faster |
 | `--no-prompt-text` | (Optional) Prompt-free mode: uses cross-lingual inference, extracts the voice from audio only, skips whisper entirely |
+| `--no-clean` | (Optional) Disable the reference-audio cleanup pipeline. On by default: denoise + loudness normalization + silence trimming |
+| `--no-denoise` | (Optional) Skip FFT denoising during cleanup. Use when the voice is already clean and denoising makes it sound muffled |
+| `--clip-seconds` | (Optional) Keep only the first N seconds after cleanup as the reference; 5–10s is best, 0 = no trimming |
 | `--out` | Output wav path, defaults to `output.wav` |
 
 ### Faster: supply the prompt text manually to skip whisper
@@ -107,6 +111,34 @@ CosyVoice2 also offers a `cross-lingual` mode that **needs no prompt text at all
 ```
 
 > Trade-off: cross-lingual drops the biggest source of error (transcription), so the **timbre is more reliable**; the cost is that prosody/tone is occasionally less natural than zero-shot. Use zero-shot when the audio is clean and transcribable, otherwise prefer this.
+
+### Still not similar? Clean up the reference audio first (the make-or-break step)
+
+**About 70% of cloning similarity is decided by reference-audio quality** — the script and parameters account for only a small fraction of the rest. An ideal reference clip is: single speaker, no background music, clear articulation, one language only, 5–10 seconds, steady emotion. Real-world recordings rarely meet this, so this tool **cleans the reference audio automatically**:
+
+```
+high-pass filter (kill low-freq rumble) → FFT denoise (suppress background noise)
+  → loudness normalization (stable volume) → trim leading/trailing silence & long pauses → resample to 16k
+```
+
+Cleanup is on by default, no flags needed. To purify further, add `--clip-seconds` to keep only the cleanest first few seconds:
+
+```bash
+"$CONDA_BASE/envs/cosyvoice/bin/python" ../tts.py \
+    --ref ~/Desktop/manbo.mp3 \
+    --text "the target text to synthesize" \
+    --no-prompt-text \
+    --clip-seconds 8 \
+    --out ../result.wav
+```
+
+Handy switches:
+
+- Voice already clean but sounds muffled after denoising → add `--no-denoise` (normalize + trim only)
+- Want to compare against the raw audio → add `--no-clean` (disable cleanup entirely)
+- Reference too long / emotionally uneven → use `--clip-seconds 8` to lock the steadiest segment
+
+> One-line rule: **get/clean a solid reference clip first, then worry about scripts and parameters.** No mode can rescue dirty audio; clean audio sounds similar no matter how you run it.
 
 ### Prefer a web UI
 
