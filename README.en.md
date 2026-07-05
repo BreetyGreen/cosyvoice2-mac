@@ -12,6 +12,7 @@ This is a minimal, battle-tested deployment recipe put together *after* hitting 
 
 - ✅ Runs fully locally: free, offline, no dependency on CapCut or any cloud service
 - ✅ Zero-shot cloning: feed a 3–10s reference clip and immediately dub any text in that voice — **no training required**
+- ✅ Two cloning modes: with prompt text (zero-shot) / prompt-free (cross-lingual — skips whisper, avoids timbre drift from mis-transcription)
 - ✅ Apple Silicon Metal (MPS) acceleration
 - ✅ One-command install script that auto-bypasses every dependency pitfall on Mac
 
@@ -78,6 +79,7 @@ Parameters:
 | `--ref` | Reference audio (a clean voice clip of whoever you want to mimic; wav/mp3, no background music) |
 | `--text` | The target text to synthesize |
 | `--prompt-text` | (Optional) The exact sentence spoken in the reference clip. If omitted, whisper transcribes it automatically; providing it manually is faster |
+| `--no-prompt-text` | (Optional) Prompt-free mode: uses cross-lingual inference, extracts the voice from audio only, skips whisper entirely |
 | `--out` | Output wav path, defaults to `output.wav` |
 
 ### Faster: supply the prompt text manually to skip whisper
@@ -89,6 +91,22 @@ Parameters:
     --text "the target text to synthesize" \
     --out ../result.wav
 ```
+
+### Voice not similar enough? Try prompt-free mode (recommended)
+
+Zero-shot mode needs the reference audio's transcript to align audio with text. If whisper mis-transcribes the reference (most common with mixed-language or noisy clips), the alignment drifts and **the cloned voice noticeably degrades**.
+
+CosyVoice2 also offers a `cross-lingual` mode that **needs no prompt text at all** — it extracts the voice straight from the audio, immune to whisper errors. Just add `--no-prompt-text`:
+
+```bash
+"$CONDA_BASE/envs/cosyvoice/bin/python" ../tts.py \
+    --ref ~/Desktop/manbo.mp3 \
+    --text "the target text to synthesize" \
+    --no-prompt-text \
+    --out ../result.wav
+```
+
+> Trade-off: cross-lingual drops the biggest source of error (transcription), so the **timbre is more reliable**; the cost is that prosody/tone is occasionally less natural than zero-shot. Use zero-shot when the audio is clean and transcribable, otherwise prefer this.
 
 ### Prefer a web UI
 

@@ -12,6 +12,7 @@
 
 - ✅ 纯本地运行，免费、离线、不依赖剪映或任何云服务
 - ✅ 零样本（zero-shot）克隆：丢一段 3~10 秒参考音频，当场就能用那个音色念任意文本，**无需训练**
+- ✅ 两种克隆模式：带参考文字（zero-shot）/ 免参考文字（cross-lingual，跳过 whisper、避免听写错误导致音色跑偏）
 - ✅ Apple 芯片 Metal(MPS) 加速
 - ✅ 一键安装脚本，自动绕过 Mac 上的全部依赖坑
 
@@ -78,6 +79,7 @@ CONDA_BASE=$(conda info --base)
 | `--ref` | 参考音频（想模仿谁的声线就给谁一段干净人声，wav/mp3 均可，别带背景音乐） |
 | `--text` | 要合成的目标文字 |
 | `--prompt-text` | （可选）参考音频里说的那句话。不给则自动用 whisper 识别；手动给会更快 |
+| `--no-prompt-text` | （可选）免参考文字模式，走 cross-lingual，只用音频抽音色、跳过 whisper |
 | `--out` | 输出 wav 路径，默认 `output.wav` |
 
 ### 更快：手动给参考文字，跳过 whisper
@@ -89,6 +91,22 @@ CONDA_BASE=$(conda info --base)
     --text "要合成的目标文字" \
     --out ../result.wav
 ```
+
+### 音色不像？试试「免参考文字」模式（推荐）
+
+zero-shot 模式需要"参考音频对应的文字"来做音频↔文字对齐；一旦 whisper 把参考音频听写错了（中英混杂、有杂音时最容易），对齐就错位，**克隆出来的音色会明显跑偏**。
+
+CosyVoice2 还有一个 `cross-lingual` 模式，**完全不需要参考文字**，直接从音频里抽音色，天生不吃 whisper 的错。加 `--no-prompt-text` 即可：
+
+```bash
+"$CONDA_BASE/envs/cosyvoice/bin/python" ../tts.py \
+    --ref ~/Desktop/manbo.mp3 \
+    --text "要合成的目标文字" \
+    --no-prompt-text \
+    --out ../result.wav
+```
+
+> 取舍：cross-lingual 免掉了听写这个最大出错源，**音色更稳**；代价是韵律/语气偶尔不如 zero-shot 自然。音频干净且能准确听写时用 zero-shot，否则优先用这个。
 
 ### 想要网页界面
 
