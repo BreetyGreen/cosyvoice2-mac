@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="CosyVoice2 on Mac" width="100%">
+</p>
+
 # mac-cosyvoice2-quickstart
 
 **[English](README.en.md) | 中文**
