@@ -183,6 +183,26 @@ Use a cleaner, longer (~10s) reference clip without background music, and make s
 
 ---
 
+## 📍 Project Status & Roadmap
+
+**Current status: core functionality is ready and usable.** One-command install, command-line synthesis (three modes), automatic reference-audio cleanup pipeline, and bilingual docs + banner are all in place.
+
+| Module | Status |
+|---|---|
+| One-command installer (idempotent, resumable) `install.sh` | ✅ |
+| CLI synthesis tool `tts.py` (zero-shot / prompt-free / auto-cleanup) | ✅ |
+| Bilingual docs + project banner | ✅ |
+
+**Possible next steps (by priority):**
+
+1. **Validate cloning similarity with one clean reference clip** (highest value, needs your material) — the root cause of "not similar enough" is a dirty reference clip, not the code; swap in a single-speaker, no-background-music, single-language, 5–10s clip to level up.
+2. Optional: save a cloned voice as `spk2info.pt` for "clone once, reuse by name" later.
+3. Optional: a batch synthesis script (one text file, many lines → many wav files).
+
+> 🤖 **Moving to a new machine / letting an AI continue the work?** See [AGENTS.md](AGENTS.md) — it captures the project's background, key technical decisions, pitfall log, and handoff steps. After cloning on another device, have the AI read that file first to pick up seamlessly, no need to re-understand from scratch.
+
+---
+
 ## 6. ⚠️ Compliance & Legal Notice
 
 Voice cloning is powerful, but "can do" does not equal "may do":
