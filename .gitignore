@@ -1,0 +1,31 @@
+# ===== 绝不上传的大文件 / 私人内容 =====
+# 官方源码（由 install.sh 自动 clone，不二次上传）
+CosyVoice/
+# 模型权重（约 3.4G，自行下载）
+pretrained_models/
+*.pt
+*.onnx
+*.safetensors
+
+# 音频文件（参考音频通常是私人/受版权内容，产物也不入库）
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.aac
+# 但保留 examples 目录下的说明占位
+!examples/.gitkeep
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ===== 系统 / 编辑器 =====
+.DS_Store
+.idea/
+.vscode/
+*.log
