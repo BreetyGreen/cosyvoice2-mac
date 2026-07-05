@@ -1,5 +1,7 @@
 # mac-cosyvoice2-quickstart
 
+**[English](README.en.md) | 中文**
+
 > 在 **macOS（Apple Silicon）** 上零基础部署 **CosyVoice2-0.5B**，用一段参考音频克隆音色，给任意文字配音。
 
 这是一份「踩完所有坑之后」整理出来的极简部署方案。CosyVoice 官方主要面向 Linux + NVIDIA GPU，在 Mac 上直接按官方步骤走会连续报错。本项目把在 **Apple M4 Pro / 48G / macOS** 上实测跑通的流程固化成一个脚本 + 一个命令行工具，让你 clone 下来就能复现。
